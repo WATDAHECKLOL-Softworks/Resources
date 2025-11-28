@@ -3,11 +3,13 @@ do
 
 	local getmetamethod = function(target: any, method: string): any?
 		local metatable: {  } | { [any]: any } = getrawmetatable(target) or {};
-		local method: any? = rawget(metatable, method);
-		return method;
+		local result: any? = rawget(metatable, method);
+		return result;
 	end;
 	
     local debounce: boolean = false;
+    local enable_index_func_hooking: boolean = true;
+
 	local output = function(mode: string, ...): ()
         while (debounce) do
             task.wait();
@@ -22,7 +24,9 @@ do
 			print(`Anti Cheat made a metamethod call to __index {args[1]} {args[2]}, at {time_of_call}`);
 		elseif (mode == "namecall") then
 			print(`Anti Cheat made a metamethod call to __namecall {args[1]}, {args[2]}, {args[3]}, at {time_of_call}`);
-		end;
+		elseif (mode == "call") then
+            print(`Anti Cheat made a direct function call to {args[1]}, {args[2]}, {args[3]}`)
+        end;
         task.wait(2);
         debounce = false;
 		return;
@@ -44,7 +48,20 @@ do
 		end;
 		local result: any = index(...);
 		local self: Instance, operand: string = ...;
-		coroutine.wrap(output)("index", self, index);
+        if (enable_index_func_hooking and type(result) == "function" and iscclosure(result) and not isfunctionhooked(result)) then
+            local func_name: string = debug.info(result, "n");
+            local hook: (...any) -> (...any); hook = hookfunction(result, newcclosure(function(...)
+                if (getthreadidentity() ~= 2 or getcallingscript() ~= ac) then
+                    return hook(...);
+                end;
+                local result: any = hook(...);
+                local arugments: {[number]: any} = {...};
+                table.remove(arugments, 1);
+                coroutine.wrap(output)("call", func_name, arugments[1], arugments[2], arugments[3])
+                return result;
+            end));
+        end;
+		coroutine.wrap(output)("index", self, operand);
 		return result;
 	end));
 end;
